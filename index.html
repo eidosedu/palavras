@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Identificador de Palavras</title>
+    
+    <!-- PWA Manifest e Meta Tags -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#ffffff">
+    <meta name="mobile-web-app-capable" content="yes">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* Slate 50 */
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+
+        /* Classes para as letras do jogo */
+        .letter-box {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.75rem;
+            height: 3.5rem;
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: #334155;
+            background-color: #ffffff;
+            border: 2px solid #cbd5e1;
+            border-radius: 0.5rem;
+            margin: 0.15rem;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            text-transform: uppercase;
+        }
+
+        .letter-box:active {
+            transform: scale(0.95);
+        }
+
+        .space-box {
+            width: 1.5rem;
+            background-color: transparent;
+            border: 2px dashed #cbd5e1;
+            box-shadow: none;
+        }
+
+        .letter-box.selected {
+            background-color: #e0f2fe;
+            border-color: #38bdf8;
+            color: #0284c7;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .letter-box.locked {
+            background-color: #22c55e;
+            border-color: #16a34a;
+            color: #ffffff;
+            cursor: default;
+            transform: scale(0.95);
+            box-shadow: none;
+            pointer-events: none;
+        }
+
+        .letter-box.error {
+            animation: shake 0.4s ease-in-out;
+            background-color: #fca5a5;
+            border-color: #ef4444;
+            color: #ffffff;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-4px); }
+            40% { transform: translateX(4px); }
+            60% { transform: translateX(-4px); }
+            80% { transform: translateX(4px); }
+        }
+
+        .word-group {
+            display: flex;
+            flex-wrap: nowrap;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased h-screen w-screen flex flex-col overflow-hidden">
+
+    <!-- ==================== TELA: MENU DE MÓDULOS ==================== -->
+    <div id="menuScreen" class="flex-1 flex flex-col w-full h-full bg-slate-50">
+        <header class="w-full bg-white shadow-sm px-4 py-4 flex justify-between items-center z-10 shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-sky-100 rounded-xl flex items-center justify-center text-sky-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="font-bold text-xl text-slate-800 tracking-tight leading-none">Palavras</h1>
+                    <span class="text-xs text-slate-400 font-medium uppercase tracking-wider">Módulos</span>
+                </div>
+            </div>
+            
+            <button onclick="openEditModule(-1)" class="w-10 h-10 bg-sky-500 text-white rounded-xl flex items-center justify-center shadow-md hover:bg-sky-600 transition-colors active:scale-95" aria-label="Criar Módulo">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+            </button>
+        </header>
+
+        <main class="flex-1 overflow-y-auto p-4 sm:p-6 w-full max-w-3xl mx-auto pb-24">
+            <div id="moduleList" class="flex flex-col gap-4">
+                <!-- Cards de módulos injetados via JS -->
+            </div>
+        </main>
+    </div>
+
+    <!-- ==================== TELA: JOGO (GAMEPLAY) ==================== -->
+    <div id="gameScreen" class="hidden flex-1 flex flex-col w-full h-full bg-slate-50 relative">
+        <header class="w-full bg-white shadow-sm px-4 py-3 flex items-center justify-between z-10 shrink-0">
+            <button onclick="showMenu()" class="p-2 -ml-2 rounded-full hover:bg-slate-100 text-slate-500 transition-colors active:scale-95 flex items-center gap-1" aria-label="Voltar">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="19" y1="12" x2="5" y2="12"></line>
+                    <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+            </button>
+            <div class="text-center flex-1 pr-6">
+                <span class="text-xs font-bold text-sky-500 uppercase tracking-widest" id="moduleIndicator">Módulo • Frase</span>
+            </div>
+        </header>
+
+        <main class="flex-1 flex flex-col items-center justify-center p-4 w-full max-w-2xl mx-auto pb-32 overflow-y-auto">
+            <p class="text-slate-500 text-center mb-8 font-medium">Toque nas letras para formar <strong class="text-sky-600 font-bold">uma palavra</strong> inteira.</p>
+
+            <div id="gameBoard" class="flex flex-wrap justify-center gap-y-3 w-full min-h-[150px] content-center">
+                <!-- Letras injetadas via JS -->
+            </div>
+        </main>
+
+        <div class="absolute bottom-6 left-0 right-0 px-6 flex justify-center pb-safe z-10 pointer-events-none">
+            <button onclick="validateSelection()" class="pointer-events-auto w-full max-w-md bg-sky-500 hover:bg-sky-600 text-white font-bold text-lg py-4 px-8 rounded-2xl shadow-lg hover:shadow-xl transition-all active:scale-95 flex items-center justify-center gap-3">
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                <span>Validar Palavra</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== MODAIS ==================== -->
+
+    <!-- Modal de Sucesso (Fecha ao clicar fora) -->
+    <div id="successModal" class="modal-overlay hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4 transition-opacity" onclick="closeSmallModal(event, 'successModal')">
+        <div class="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl modal-content">
+            <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+            </div>
+            <h2 id="successTitle" class="text-2xl font-bold text-slate-800 mb-2">Muito Bem!</h2>
+            <p id="successMessage" class="text-slate-500 mb-8">Você identificou todas as palavras.</p>
+            <button onclick="nextSentence()" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-4 rounded-xl transition-colors active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-green-500/30">
+                <span id="successBtnText">Próxima Frase</span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                    <polyline points="12 5 19 12 12 19"></polyline>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal de Edição de Módulo (Requer botão cancelar, sem clique fora) -->
+    <div id="editModuleModal" class="modal-overlay hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4 sm:p-6">
+        <div class="bg-white rounded-3xl w-full max-w-lg h-[90vh] flex flex-col shadow-2xl overflow-hidden relative">
+            <div class="px-6 py-5 border-b border-slate-100 bg-slate-50 shrink-0">
+                <h2 id="editModalTitle" class="font-bold text-xl text-slate-800">Editar Módulo</h2>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
+                <!-- Nome do Módulo -->
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-2">Nome do Módulo</label>
+                    <input type="text" id="moduleNameInput" placeholder="Ex: Frases de Animais" class="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition-all font-medium">
+                </div>
+
+                <!-- Lista de Frases -->
+                <div>
+                    <div class="flex items-center justify-between mb-3">
+                        <label class="block text-sm font-bold text-slate-700">Frases do Jogo</label>
+                    </div>
+                    <div id="sentenceEditorList" class="flex flex-col gap-3">
+                        <!-- Campos injetados via JS -->
+                    </div>
+                    
+                    <button onclick="addSentenceField()" class="mt-4 w-full border-2 border-dashed border-slate-200 text-slate-500 hover:border-sky-300 hover:text-sky-500 hover:bg-sky-50 font-semibold rounded-xl py-4 transition-colors flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        Adicionar Frase
+                    </button>
+                </div>
+            </div>
+
+            <div class="px-6 py-4 border-t border-slate-100 bg-white flex justify-end gap-3 shrink-0">
+                <button onclick="closeModal('editModuleModal')" class="px-6 py-3 rounded-xl text-slate-600 font-bold hover:bg-slate-100 transition-colors">
+                    Cancelar
+                </button>
+                <button onclick="saveModule()" class="px-6 py-3 bg-sky-500 text-white rounded-xl font-bold hover:bg-sky-600 transition-colors shadow-lg shadow-sky-500/30 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                    Salvar Módulo
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Confirmação (Nativo, substitui confirm/alert) -->
+    <div id="confirmModal" class="modal-overlay hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl">
+            <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+            </div>
+            <h3 class="text-xl font-bold text-slate-800 mb-2" id="confirmTitle">Excluir Módulo?</h3>
+            <p class="text-slate-500 mb-6 text-sm" id="confirmMessage">Esta ação não poderá ser desfeita.</p>
+            <div class="flex gap-3">
+                <button onclick="closeModal('confirmModal')" class="flex-1 py-3 rounded-xl text-slate-600 font-bold bg-slate-100 hover:bg-slate-200 transition-colors">
+                    Cancelar
+                </button>
+                <button id="confirmActionBtn" class="flex-1 py-3 rounded-xl text-white font-bold bg-red-500 hover:bg-red-600 transition-colors shadow-lg shadow-red-500/30">
+                    Excluir
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DADOS PADRÃO (3 Módulos) ---
+        const defaultData = {
+            modules: [
+                {
+                    id: 1,
+                    name: "Frases Curtas",
+                    sentences: [
+                        "O GATO BEBEU LEITE",
+                        "A BOLA AZUL",
+                        "O SOL BRILHA FORTE"
+                    ]
+                },
+                {
+                    id: 2,
+                    name: "Ações e Movimentos",
+                    sentences: [
+                        "EU GOSTO DE PULAR",
+                        "O MENINO CORREU RAPIDO",
+                        "O CACHORRO LATIU ALTO"
+                    ]
+                },
+                {
+                    id: 3,
+                    name: "Natureza",
+                    sentences: [
+                        "A ARVORE CRESCEU MUITO",
+                        "O RIO ESTA CHEIO",
+                        "A FLOR E BONITA"
+                    ]
+                }
+            ]
+        };
+
+        // --- ESTADO GLOBAL ---
+        let appData = {};
+        let currentScreen = 'menu'; // 'menu' ou 'game'
+        let editingModuleIndex = -1; // -1 indica novo módulo
+        let currentModuleIndex = 0;
+        let currentSentenceIndex = 0;
+        let totalWordsInSentence = 0;
+        let lockedWordsCount = 0;
+        let isAnimating = false;
+
+        // --- INICIALIZAÇÃO ---
+        window.onload = () => {
+            loadData();
+            renderMenu();
+            registerFakeServiceWorker();
+        };
+
+        function loadData() {
+            const savedData = localStorage.getItem('wordGameData');
+            if (savedData) {
+                try {
+                    appData = JSON.parse(savedData);
+                } catch (e) {
+                    appData = JSON.parse(JSON.stringify(defaultData));
+                }
+            } else {
+                appData = JSON.parse(JSON.stringify(defaultData));
+            }
+            if (!appData.modules) appData.modules = [];
+        }
+
+        function saveData() {
+            localStorage.setItem('wordGameData', JSON.stringify(appData));
+        }
+
+        // --- TELA DE MENU ---
+        function showMenu() {
+            document.getElementById('gameScreen').classList.add('hidden');
+            document.getElementById('menuScreen').classList.remove('hidden');
+            currentScreen = 'menu';
+            renderMenu();
+        }
+
+        function renderMenu() {
+            const list = document.getElementById('moduleList');
+            list.innerHTML = '';
+
+            if (appData.modules.length === 0) {
+                list.innerHTML = `<div class="text-center py-10 text-slate-400 font-medium">Nenhum módulo criado. Clique no + para criar.</div>`;
+                return;
+            }
+
+            appData.modules.forEach((mod, index) => {
+                const card = document.createElement('div');
+                card.className = "bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between";
+                
+                const count = mod.sentences ? mod.sentences.length : 0;
+                
+                card.innerHTML = `
+                    <div class="flex-1 pr-4">
+                        <h3 class="font-bold text-lg text-slate-800 leading-tight mb-1">${mod.name}</h3>
+                        <span class="text-sm text-slate-400 font-medium flex items-center gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"></path></svg>
+                            ${count} ${count === 1 ? 'frase' : 'frases'}
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <button onclick="openEditModule(${index})" class="w-12 h-12 bg-slate-50 text-slate-500 hover:text-sky-500 hover:bg-sky-50 rounded-xl flex items-center justify-center transition-colors active:scale-95" aria-label="Editar">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                        </button>
+                        <button onclick="playModule(${index})" class="w-12 h-12 bg-sky-100 text-sky-600 hover:bg-sky-500 hover:text-white rounded-xl flex items-center justify-center transition-colors shadow-sm active:scale-95" aria-label="Jogar">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        // --- SISTEMA DE EDIÇÃO DE MÓDULOS ---
+        function openEditModule(index) {
+            editingModuleIndex = index;
+            const title = document.getElementById('editModalTitle');
+            const nameInput = document.getElementById('moduleNameInput');
+            const sentenceList = document.getElementById('sentenceEditorList');
+            
+            sentenceList.innerHTML = '';
+
+            if (index === -1) {
+                // Novo Módulo
+                title.textContent = "Novo Módulo";
+                nameInput.value = "";
+                addSentenceField(""); 
+            } else {
+                // Editar Existente
+                title.textContent = "Editar Módulo";
+                const mod = appData.modules[index];
+                nameInput.value = mod.name;
+                
+                if (mod.sentences && mod.sentences.length > 0) {
+                    mod.sentences.forEach(s => addSentenceField(s));
+                } else {
+                    addSentenceField("");
+                }
+
+                // Adiciona botão extra para deletar módulo inteiro na base da lista
+                const deleteBtnDiv = document.createElement('div');
+                deleteBtnDiv.className = "mt-6 pt-6 border-t border-red-100";
+                deleteBtnDiv.innerHTML = `
+                    <button onclick="confirmAction('Excluir Módulo?', 'Deseja excluir este módulo inteiro? Esta ação não pode ser desfeita.', () => deleteModule(${index}))" class="w-full flex items-center justify-center gap-2 text-red-500 font-bold bg-red-50 py-3 rounded-xl hover:bg-red-100 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        Excluir Módulo
+                    </button>
+                `;
+                sentenceList.appendChild(deleteBtnDiv);
+            }
+
+            document.getElementById('editModuleModal').classList.remove('hidden');
+        }
+
+        function addSentenceField(value = "") {
+            const list = document.getElementById('sentenceEditorList');
+            const div = document.createElement('div');
+            div.className = "flex items-center gap-2 sentence-row";
+            
+            div.innerHTML = `
+                <input type="text" value="${value}" placeholder="Digite a frase..." class="flex-1 bg-white border border-slate-200 text-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-sky-500 font-medium uppercase text-sm">
+                <button onclick="this.parentElement.remove()" class="w-12 h-12 shrink-0 bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl flex items-center justify-center transition-colors" aria-label="Remover">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            `;
+            
+            // Inserir antes do botão de deletar módulo, se existir
+            const deleteDiv = list.querySelector('.border-red-100');
+            if (deleteDiv) {
+                list.insertBefore(div, deleteDiv);
+            } else {
+                list.appendChild(div);
+            }
+        }
+
+        function saveModule() {
+            const nameInput = document.getElementById('moduleNameInput').value.trim();
+            const inputs = document.querySelectorAll('.sentence-row input');
+            
+            if (!nameInput) {
+                // Alerta nativo se vazio
+                confirmAction("Atenção", "O nome do módulo não pode estar vazio.", () => {});
+                document.getElementById('confirmActionBtn').classList.add('hidden'); // Esconde botão de confirmar para virar um "Alert" simples
+                return;
+            }
+
+            const newSentences = [];
+            inputs.forEach(input => {
+                const val = input.value.trim().toUpperCase();
+                if (val) newSentences.push(val);
+            });
+
+            if (newSentences.length === 0) {
+                confirmAction("Atenção", "Adicione pelo menos uma frase válida.", () => {});
+                document.getElementById('confirmActionBtn').classList.add('hidden');
+                return;
+            }
+
+            if (editingModuleIndex === -1) {
+                appData.modules.push({
+                    id: Date.now(),
+                    name: nameInput,
+                    sentences: newSentences
+                });
+            } else {
+                appData.modules[editingModuleIndex].name = nameInput;
+                appData.modules[editingModuleIndex].sentences = newSentences;
+            }
+
+            saveData();
+            closeModal('editModuleModal');
+            renderMenu();
+        }
+
+        function deleteModule(index) {
+            appData.modules.splice(index, 1);
+            saveData();
+            closeModal('editModuleModal');
+            renderMenu();
+        }
+
+        // --- SISTEMA DE DIÁLOGOS (NATIVOS) ---
+        function confirmAction(title, message, callback) {
+            document.getElementById('confirmTitle').textContent = title;
+            document.getElementById('confirmMessage').textContent = message;
+            
+            const actionBtn = document.getElementById('confirmActionBtn');
+            actionBtn.classList.remove('hidden'); // Restaura caso tenha sido usado como alert
+            
+            actionBtn.onclick = () => {
+                callback();
+                closeModal('confirmModal');
+            };
+            
+            document.getElementById('confirmModal').classList.remove('hidden');
+        }
+
+        // --- TELA DE JOGO ---
+        function playModule(index) {
+            const module = appData.modules[index];
+            if (!module || !module.sentences || module.sentences.length === 0) return;
+
+            currentModuleIndex = index;
+            currentSentenceIndex = 0;
+            currentScreen = 'game';
+            
+            document.getElementById('menuScreen').classList.add('hidden');
+            document.getElementById('gameScreen').classList.remove('hidden');
+            
+            startLevel();
+        }
+
+        function startLevel() {
+            const board = document.getElementById('gameBoard');
+            const indicator = document.getElementById('moduleIndicator');
+            board.innerHTML = '';
+            lockedWordsCount = 0;
+
+            const module = appData.modules[currentModuleIndex];
+            const sentence = module.sentences[currentSentenceIndex].trim();
+            indicator.textContent = `${module.name} • ${currentSentenceIndex + 1}/${module.sentences.length}`;
+            
+            const words = sentence.split(/\s+/);
+            totalWordsInSentence = words.length;
+
+            words.forEach((word, wIdx) => {
+                const wordGroup = document.createElement('div');
+                wordGroup.className = 'word-group';
+
+                for(let i = 0; i < word.length; i++) {
+                    const letterBox = document.createElement('div');
+                    letterBox.className = 'letter-box';
+                    letterBox.textContent = word[i];
+                    letterBox.dataset.wordIndex = wIdx;
+                    letterBox.onclick = () => toggleSelection(letterBox);
+                    wordGroup.appendChild(letterBox);
+                }
+                
+                board.appendChild(wordGroup);
+
+                if (wIdx < words.length - 1) {
+                    const spaceGroup = document.createElement('div');
+                    spaceGroup.className = 'word-group';
+                    
+                    const spaceBox = document.createElement('div');
+                    spaceBox.className = 'letter-box space-box';
+                    spaceBox.dataset.isSpace = "true";
+                    spaceBox.onclick = () => toggleSelection(spaceBox);
+                    
+                    spaceGroup.appendChild(spaceBox);
+                    board.appendChild(spaceGroup);
+                }
+            });
+        }
+
+        function toggleSelection(element) {
+            if (isAnimating || element.classList.contains('locked')) return;
+            element.classList.toggle('selected');
+        }
+
+        function validateSelection() {
+            if (isAnimating) return;
+
+            const selectedEls = document.querySelectorAll('.letter-box.selected');
+            if (selectedEls.length === 0) return;
+
+            let isError = false;
+            let targetWordIndex = null;
+
+            for (let el of selectedEls) {
+                if (el.dataset.isSpace === "true") {
+                    isError = true;
+                    break;
+                }
+                
+                const wIdx = el.dataset.wordIndex;
+                if (targetWordIndex === null) {
+                    targetWordIndex = wIdx;
+                } else if (targetWordIndex !== wIdx) {
+                    isError = true; 
+                    break;
+                }
+            }
+
+            if (!isError && targetWordIndex !== null) {
+                const totalLettersInTargetWord = document.querySelectorAll(`.letter-box[data-word-index="${targetWordIndex}"]`).length;
+                if (selectedEls.length !== totalLettersInTargetWord) {
+                    isError = true; 
+                }
+            } else if (!isError && targetWordIndex === null) {
+                isError = true; 
+            }
+
+            if (isError) {
+                triggerError(selectedEls);
+            } else {
+                triggerSuccess(selectedEls);
+            }
+        }
+
+        function triggerError(elements) {
+            isAnimating = true;
+            elements.forEach(el => {
+                el.classList.remove('selected');
+                el.classList.add('error');
+            });
+
+            setTimeout(() => {
+                elements.forEach(el => el.classList.remove('error'));
+                isAnimating = false;
+            }, 400);
+        }
+
+        function triggerSuccess(elements) {
+            elements.forEach(el => {
+                el.classList.remove('selected');
+                el.classList.add('locked');
+            });
+            lockedWordsCount++;
+
+            if (lockedWordsCount === totalWordsInSentence) {
+                setTimeout(() => {
+                    const module = appData.modules[currentModuleIndex];
+                    const isLast = currentSentenceIndex >= module.sentences.length - 1;
+                    
+                    document.getElementById('successTitle').textContent = isLast ? "Módulo Concluído!" : "Muito Bem!";
+                    document.getElementById('successMessage').textContent = isLast ? "Você completou todas as frases deste módulo." : "Você identificou todas as palavras.";
+                    document.getElementById('successBtnText').textContent = isLast ? "Voltar ao Menu" : "Próxima Frase";
+                    
+                    document.getElementById('successModal').classList.remove('hidden');
+                }, 300);
+            }
+        }
+
+        function nextSentence() {
+            closeModal('successModal');
+            
+            const module = appData.modules[currentModuleIndex];
+            if (currentSentenceIndex >= module.sentences.length - 1) {
+                // Terminou o módulo
+                setTimeout(() => { showMenu(); }, 200);
+            } else {
+                currentSentenceIndex++;
+                setTimeout(startLevel, 200);
+            }
+        }
+
+        // --- UTILIDADES ---
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+        }
+
+        function closeSmallModal(event, id) {
+            if (event.target.classList.contains('modal-overlay')) {
+                closeModal(id);
+            }
+        }
+        
+        // --- INTEGRAÇÃO COM KODULAR / ANDROID ---
+        window.handleAndroidBack = function() {
+            // 1. Fecha modais prioritariamente
+            const confirmModal = document.getElementById('confirmModal');
+            if (!confirmModal.classList.contains('hidden')) {
+                closeModal('confirmModal');
+                return;
+            }
+
+            const editModal = document.getElementById('editModuleModal');
+            if (!editModal.classList.contains('hidden')) {
+                closeModal('editModuleModal');
+                return;
+            }
+
+            const successModal = document.getElementById('successModal');
+            if (!successModal.classList.contains('hidden')) {
+                closeModal('successModal');
+                return;
+            }
+
+            // 2. Se estiver jogando, volta pro menu
+            if (currentScreen === 'game') {
+                showMenu();
+                return;
+            }
+
+            // 3. Se estiver no menu e sem modais, envia sinal para fechar app/voltar pro app principal
+            if (window.AppInventor && window.AppInventor.setWebViewString) {
+                window.AppInventor.setWebViewString('VOLTAR_MENU');
+            }
+        };
+
+        window.receberTextoDoKodular = function(texto) {
+            try {
+                const externoData = JSON.parse(texto);
+                if (externoData.modules) {
+                    appData = externoData;
+                    saveData();
+                    if(currentScreen === 'menu') renderMenu();
+                }
+            } catch (e) {
+                console.log("Erro ao processar dados do Kodular.");
+            }
+        };
+
+        function registerFakeServiceWorker() {
+            if ('serviceWorker' in navigator) {
+                // navigator.serviceWorker.register('sw.js');
+            }
+        }
+    </script>
+</body>
+</html>
